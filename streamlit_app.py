@@ -237,7 +237,7 @@ with tab_uk:
                                "expected": "Expected", "excess_z": "z",
                                "cell_m": "Cell (m)", "from_month": "From",
                                "to_month": "To", "streets": "Streets"}),
-            use_container_width=True, hide_index=True)
+            width="stretch", hide_index=True)
         st.caption(
             "Each 200 m cell is compared with the ring of cells around it, so this "
             "is excess over the **local** baseline rather than raw density — "
@@ -257,7 +257,7 @@ with tab_uk:
                            "status_label": "Status", "street": "Location",
                            "month": "Month", "age_months": "Age (months)",
                            "hotspot_z": "Hotspot z"}),
-        use_container_width=True, hide_index=True,
+        width="stretch", hide_index=True,
         column_config={"Priority": st.column_config.ProgressColumn(
             "Priority", min_value=0, max_value=100, format="%.1f")})
     st.caption("Priority = severity × unsolved status × age, blended with local "
@@ -312,7 +312,7 @@ with tab_eu:
         labels = chart.mark_text(align="left", dx=6, fontSize=11,
                                  color="#475569").encode(
             text=alt.Text("offences:Q", format=",.0f"))
-        st.altair_chart(chart + labels, use_container_width=True)
+        st.altair_chart(chart + labels, width="stretch")
 
         st.caption(
             f"**{offence_label}, {year}.** Raw counts, not population-adjusted — "
@@ -322,7 +322,7 @@ with tab_eu:
         with st.expander("Table view"):
             st.dataframe(df.rename(columns={"country": "Country",
                                             "offences": offence_label}),
-                         use_container_width=True, hide_index=True)
+                         width="stretch", hide_index=True)
 
 
 # --------------------------------------------------------------------------
