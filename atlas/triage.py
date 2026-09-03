@@ -126,6 +126,40 @@ def coldness(crime: Crime, latest_month: str) -> float:
     return round(100 * sev * w * (0.35 + 0.65 * age_factor), 1)
 
 
+def explain(crime: Crime, latest_month: str, hotspot_z: float = 0.0) -> dict:
+    """
+    Decompose a case's priority into the terms that produced it.
+
+    The score is a judgement call dressed as a number, so it should be able to
+    show its working rather than asking to be trusted.
+    """
+    st = status_of(crime, latest_month)
+    w = _STATUS_WEIGHT[st]
+    sev = SEVERITY.get(crime.category, 0.3)
+    age = months_between(crime.month, latest_month)
+    age_factor = 1 - math.exp(-age / 18) if age > 0 else 0.0
+    age_term = 0.35 + 0.65 * age_factor
+    base = round(100 * sev * w * age_term, 1)
+    place_term = 100 * min(hotspot_z, 6.0) / 6.0
+
+    return {
+        "terms": [
+            {"label": "Offence severity", "weight": sev,
+             "note": f"{crime.category.replace('-', ' ')} on a 0-1 scale set in "
+                     f"triage.SEVERITY"},
+            {"label": "Unsolved status", "weight": w,
+             "note": f"{STATUS_LABEL[st]} - resolved cases score 0 and drop out"},
+            {"label": "Age", "weight": round(age_term, 3),
+             "note": f"{age} months old; rises steeply for two years then flattens"},
+        ],
+        "case_score": base,
+        "place_score": round(place_term, 1),
+        "hotspot_z": round(hotspot_z, 1),
+        "priority": round(0.75 * base + 0.25 * place_term, 1) if base else 0.0,
+        "formula": "priority = 0.75 x (severity x status x age) + 0.25 x local excess",
+    }
+
+
 # --------------------------------------------------------------------------
 # Hotspot detection
 # --------------------------------------------------------------------------
@@ -306,7 +340,10 @@ def build_portfolio(crimes: list[Crime], latest_month: str) -> dict:
             "in_hotspot": key in z_by_crime,
         })
 
-    rows.sort(key=lambda r: -r["priority"])
+    # Filtering to a single category makes severity constant, so priority ties
+    # in bulk and the order within a tie would otherwise be arbitrary. Break on
+    # local excess, then on age - the two things that still distinguish them.
+    rows.sort(key=lambda r: (-r["priority"], -r["hotspot_z"], -r["age_months"]))
     total = len(rows) or 1
     return {
         "latest_month": latest_month,
