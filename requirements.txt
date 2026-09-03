@@ -1,0 +1,9 @@
+# Deployment requirements (Streamlit Community Cloud).
+#
+# Deliberately excludes curl_cffi: the Interpol layer is local-only, and
+# leaving the library out means the cloud build cannot make that call even
+# if the feature flag were set. See atlas/config.py.
+streamlit>=1.40
+altair>=5.4
+pandas>=2.0
+requests>=2.31

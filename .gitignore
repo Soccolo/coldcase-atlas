@@ -1,0 +1,25 @@
+# Cached Interpol notices. These contain the names, dates of birth and
+# photographs of real missing people. They must never reach a public repo.
+.cache/
+*.cache
+
+# Secrets
+.env
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+build/
+dist/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

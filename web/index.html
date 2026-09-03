@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cold Case Atlas</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{
+    --bg:#12141a; --panel:#191c24; --panel2:#1f2330; --line:#2b3040;
+    --ink:#e8eaf0; --dim:#8d94a8; --accent:#6ea8fe;
+    --cold:#5eb0ef; --stalled:#e0a03a; --open:#7d8697; --resolved:#4a5568; --unknown:#a06ecb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       background:var(--bg);color:var(--ink)}
+  header{padding:14px 20px;border-bottom:1px solid var(--line);display:flex;
+         align-items:center;gap:16px;flex-wrap:wrap;background:var(--panel)}
+  h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.2px}
+  h1 span{color:var(--dim);font-weight:400}
+  form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-left:auto}
+  input,select,button{background:var(--panel2);color:var(--ink);border:1px solid var(--line);
+                      border-radius:6px;padding:7px 10px;font:inherit;font-size:13px}
+  input{width:130px}
+  button{background:var(--accent);color:#0b1020;border-color:transparent;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  .stats{display:flex;gap:0;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  .stat{padding:12px 20px;border-right:1px solid var(--line);min-width:120px}
+  .stat b{display:block;font-size:22px;font-weight:650;line-height:1.2}
+  .stat small{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+  main{display:grid;grid-template-columns:minmax(0,1fr) 420px;height:calc(100vh - 122px)}
+  @media(max-width:900px){main{grid-template-columns:1fr;height:auto}#map{height:50vh}}
+  #map{height:100%;background:#0d0f14}
+  /* Darken the light OSM tiles without needing a dark tile provider. The
+     filter applies to tiles only, so markers and popups keep their colours. */
+  .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.86) contrast(.92)}
+  aside{border-left:1px solid var(--line);overflow-y:auto;background:var(--panel)}
+  .section{padding:12px 16px;border-bottom:1px solid var(--line)}
+  .section h2{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);
+              margin:0 0 8px;font-weight:600}
+  .case{padding:10px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+  .case:hover{background:var(--panel2)}
+  .case-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+  .case-street{font-weight:600}
+  .score{font-variant-numeric:tabular-nums;font-weight:650;color:var(--accent)}
+  .meta{color:var(--dim);font-size:12px;margin-top:2px}
+  .pill{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;
+        font-weight:600;margin-right:6px}
+  .p-cold{background:rgba(94,176,239,.16);color:var(--cold)}
+  .p-stalled{background:rgba(224,160,58,.16);color:var(--stalled)}
+  .p-open{background:rgba(125,134,151,.18);color:var(--open)}
+  .p-resolved{background:rgba(74,85,104,.25);color:#8b96a8}
+  .p-unknown{background:rgba(160,110,203,.16);color:var(--unknown)}
+  .cluster{background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+           padding:10px 12px;margin-bottom:8px;cursor:pointer}
+  .cluster:hover{border-color:var(--accent)}
+  .cluster b{color:var(--stalled)}
+  .note{color:var(--dim);font-size:12px;line-height:1.55}
+  .banner{background:rgba(224,160,58,.1);border:1px solid rgba(224,160,58,.3);
+          border-radius:8px;padding:10px 12px;margin:12px 16px;font-size:12px;color:#e8c88a}
+  footer{padding:10px 20px;border-top:1px solid var(--line);color:var(--dim);
+         font-size:11px;background:var(--panel)}
+  .spin{color:var(--dim);padding:24px 16px;text-align:center}
+  .notice{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .notice img{width:56px;height:72px;object-fit:cover;border-radius:5px;
+              background:var(--panel2);flex-shrink:0}
+  .notice .noimg{width:56px;height:72px;border-radius:5px;background:var(--panel2);
+                 display:flex;align-items:center;justify-content:center;
+                 color:var(--dim);font-size:10px;flex-shrink:0}
+  .notice b{display:block;font-size:14px}
+  .yrs{color:var(--cold);font-weight:650;font-variant-numeric:tabular-nums}
+  .marks{color:var(--dim);font-size:12px;margin-top:4px;font-style:italic}
+  .leaflet-popup-content-wrapper{background:var(--panel2);color:var(--ink);border-radius:8px}
+  .leaflet-popup-tip{background:var(--panel2)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Cold Case Atlas <span id="place">— UK official crime record</span></h1>
+  <form id="f">
+    <select id="mode" aria-label="Mode">
+      <option value="uk" selected>UK crime record</option>
+      <option value="eu">EU missing persons</option>
+    </select>
+    <input id="pc" value="M1 1AE" placeholder="Postcode" aria-label="Postcode">
+    <select id="cat" aria-label="Category">
+      <option value="all-crime">All crime</option>
+      <option value="violent-crime" selected>Violence &amp; sexual offences</option>
+      <option value="robbery">Robbery</option>
+      <option value="burglary">Burglary</option>
+      <option value="criminal-damage-arson">Criminal damage &amp; arson</option>
+      <option value="possession-of-weapons">Possession of weapons</option>
+      <option value="vehicle-crime">Vehicle crime</option>
+    </select>
+    <select id="mo" aria-label="Months">
+      <option value="12">12 months</option>
+      <option value="24" selected>24 months</option>
+      <option value="36">36 months</option>
+    </select>
+    <button id="go">Search</button>
+  </form>
+</header>
+
+<div class="stats" id="stats"></div>
+
+<main>
+  <div id="map"></div>
+  <aside id="side"><div class="spin">Enter a postcode and search.</div></aside>
+</main>
+
+<footer id="foot">
+  Contains public sector information licensed under the Open Government Licence v3.0 — source: data.police.uk
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const COLORS = {cold:'#5eb0ef', stalled:'#e0a03a', open:'#7d8697',
+                resolved:'#4a5568', unknown:'#a06ecb'};
+
+const map = L.map('map', {zoomControl:true}).setView([53.4834,-2.2312], 14);
+// Plain OSM tiles: no API key, no account. Darkened in CSS instead of using
+// a dark tile provider, all of which now want a key.
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'&copy; OpenStreetMap contributors', maxZoom:19
+}).addTo(map);
+
+let layer = L.layerGroup().addTo(map);
+let current = null;
+
+const modeEl = document.getElementById('mode');
+const ukOnly = ['pc','cat','mo'];
+
+function syncMode(){
+  const eu = modeEl.value === 'eu';
+  ukOnly.forEach(id => document.getElementById(id).style.display = eu ? 'none' : '');
+  document.getElementById('map').style.display = eu ? 'none' : '';
+  document.querySelector('main').style.gridTemplateColumns = eu ? '1fr' : '';
+}
+modeEl.addEventListener('change', () => { syncMode(); go(); });
+document.getElementById('f').addEventListener('submit', e => { e.preventDefault(); go(); });
+
+function go(){ return modeEl.value === 'eu' ? loadEU() : load(); }
+
+async function load(){
+  const btn = document.getElementById('go');
+  btn.disabled = true; btn.textContent = 'Searching…';
+  document.getElementById('side').innerHTML = '<div class="spin">Sweeping months of police.uk data…</div>';
+  const pc  = document.getElementById('pc').value.trim();
+  const cat = document.getElementById('cat').value;
+  const mo  = document.getElementById('mo').value;
+  try{
+    const r = await fetch(`/api/portfolio?postcode=${encodeURIComponent(pc)}&category=${cat}&months=${mo}`);
+    if(!r.ok){ throw new Error((await r.json()).detail || r.statusText); }
+    current = await r.json();
+    render(current);
+  }catch(err){
+    document.getElementById('side').innerHTML =
+      `<div class="spin">Could not load: ${escapeHtml(err.message)}</div>`;
+  }finally{ btn.disabled = false; btn.textContent = 'Search'; }
+}
+
+function render(d){
+  document.getElementById('place').textContent = '— ' + d.place;
+
+  const t = d.tally || {};
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><b>${d.total}</b><small>records</small></div>
+    <div class="stat"><b style="color:${COLORS.cold}">${t.cold||0}</b><small>cold · no suspect</small></div>
+    <div class="stat"><b style="color:${COLORS.stalled}">${t.stalled||0}</b><small>stalled</small></div>
+    <div class="stat"><b>${d.unsolved_pct}%</b><small>unsolved</small></div>
+    <div class="stat"><b style="color:${COLORS.unknown}">${d.hotspots.length}</b><small>hotspots</small></div>
+    <div class="stat"><b>${d.months_swept}</b><small>months to ${d.latest_month}</small></div>`;
+
+  layer.clearLayers();
+  map.setView([d.centre.lat, d.centre.lng], 14);
+
+  d.hotspots.forEach(h => {
+    L.circle([h.centre.lat, h.centre.lng], {
+      radius: h.cell_m * 0.75, color:'#e0a03a', weight:1,
+      fillColor:'#e0a03a', fillOpacity:.09
+    }).addTo(layer).bindPopup(
+      `<b>${h.ratio}× the surrounding area</b><br>`+
+      `${h.observed} unsolved ${h.category.replace(/-/g,' ')} where `+
+      `${h.expected} would be expected (z=${h.excess_z})<br>`+
+      `${h.from_month} → ${h.to_month}<br>`+
+      `<span style="color:#8d94a8">${h.streets.join(', ')}</span>`);
+  });
+
+  d.cases.filter(c => c.lat && c.status !== 'resolved').forEach(c => {
+    L.circleMarker([c.lat, c.lng], {
+      radius: 3 + (c.priority/100)*6, color:COLORS[c.status], weight:1.2,
+      fillColor:COLORS[c.status], fillOpacity:.55
+    }).addTo(layer).bindPopup(
+      `<b>${escapeHtml(c.street)}</b><br>${c.month} · priority ${c.priority}<br>`+
+      `<span style="color:#8d94a8">${escapeHtml(c.status_label)}</span>`);
+  });
+
+  const top = d.cases.filter(c => c.priority > 0).slice(0, 60);
+  document.getElementById('side').innerHTML = `
+    ${d.hotspots.length ? `<div class="section"><h2>Hotspots — unsolved crime above the local baseline</h2>
+      ${d.hotspots.slice(0,12).map(h => `<div class="cluster" onclick="map.setView([${h.centre.lat},${h.centre.lng}],17)">
+        <b>${h.ratio}×</b> the surrounding area · ${h.observed} where ${h.expected} expected
+        <div class="meta">${h.category.replace(/-/g,' ')} · ${h.cell_m} m cell · z=${h.excess_z}</div>
+        <div class="meta">${h.from_month} → ${h.to_month} · ${escapeHtml(h.streets.slice(0,3).join(', '))}</div>
+      </div>`).join('')}
+      <div class="note">Each cell is compared with the ring of cells around it, so this is
+      excess over the local baseline rather than raw density. It is still a pattern in
+      <em>reported</em> data, not evidence that offences are linked — and police.uk snaps
+      every record to an anonymised map point, so a cell can look busy because a snap
+      point sits inside it. Treat a hotspot as a question, never as a finding.</div></div>` : ''}
+    <div class="section"><h2>Ranked by priority</h2>
+      <div class="note">Severity × unsolved status × age, blended with local hotspot excess.</div></div>
+    ${top.map(c => `<div class="case" onclick="map.setView([${c.lat},${c.lng}],17)">
+      <div class="case-top"><span class="case-street">${escapeHtml(c.street)}</span>
+        <span class="score">${c.priority}</span></div>
+      <div class="meta"><span class="pill p-${c.status}">${escapeHtml(c.status_label)}</span></div>
+      <div class="meta">${c.month} · ${c.age_months} months old${c.in_hotspot ? ` · hotspot z=${c.hotspot_z}` : ''}</div>
+    </div>`).join('')}`;
+}
+
+async function loadEU(){
+  const btn = document.getElementById('go');
+  btn.disabled = true; btn.textContent = 'Loading…';
+  document.getElementById('place').textContent = '— EU, EEA and UK missing persons';
+  document.getElementById('side').innerHTML =
+    '<div class="spin">Fetching Interpol yellow notices… first run takes a minute, then it is cached for a week.</div>';
+  document.getElementById('stats').innerHTML = '';
+  try{
+    const r = await fetch('/api/eu/missing?per_country=25&detail=true');
+    if(!r.ok){ throw new Error((await r.json()).detail || r.statusText); }
+    renderEU(await r.json());
+  }catch(err){
+    document.getElementById('side').innerHTML =
+      `<div class="spin">Could not load: ${escapeHtml(err.message)}</div>`;
+  }finally{ btn.disabled = false; btn.textContent = 'Search'; }
+}
+
+function renderEU(d){
+  const dated = d.notices.filter(n => n.years_missing != null);
+  const long  = dated.filter(n => n.years_missing >= 5).length;
+  const kids  = d.notices.filter(n => n.age_now != null && n.age_now < 18).length;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><b>${d.count}</b><small>open notices</small></div>
+    <div class="stat"><b style="color:var(--cold)">${long}</b><small>missing 5+ years</small></div>
+    <div class="stat"><b style="color:var(--stalled)">${kids}</b><small>currently under 18</small></div>
+    <div class="stat"><b>${d.countries.length}</b><small>countries</small></div>`;
+
+  document.getElementById('side').innerHTML = `
+    <div class="section"><h2>Interpol yellow notices — longest missing first</h2>
+      <div class="note">Official missing-person appeals, republished unchanged and
+      attributed. Names and photographs are shown here precisely because the issuing
+      country published them so the public would see them — the opposite of the
+      community layer, where names are masked. If you recognise someone, contact your
+      national police or Interpol, never a forum.</div></div>
+    ${d.notices.map(n => `<div class="notice">
+      ${n.thumbnail ? `<img src="${escapeHtml(n.thumbnail)}" alt="" loading="lazy"
+           onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'noimg',textContent:'no photo'}))">`
+        : `<div class="noimg">no photo</div>`}
+      <div style="min-width:0">
+        <b>${escapeHtml(n.display_name)}</b>
+        <div class="meta">
+          ${n.years_missing != null ? `<span class="yrs">${n.years_missing} years missing</span> · ` : ''}
+          ${n.date_of_event ? escapeHtml(n.date_of_event) + ' · ' : ''}
+          ${n.age_now != null ? 'age ' + n.age_now + ' now' : 'age unknown'}
+        </div>
+        <div class="meta">
+          ${n.nationalities.length ? escapeHtml(n.nationalities.join(', ')) : '?'}
+          ${n.issuing_country ? ' · issued by ' + escapeHtml(n.issuing_country) : ''}
+          ${n.place_of_birth ? ' · b. ' + escapeHtml(n.place_of_birth) : ''}
+        </div>
+        ${n.distinguishing_marks ? `<div class="marks">${escapeHtml(n.distinguishing_marks)}</div>` : ''}
+      </div>
+    </div>`).join('')}
+    <div class="section"><div class="note">Source: ${escapeHtml(d.source)}</div></div>`;
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+syncMode();
+go();
+</script>
+</body>
+</html>

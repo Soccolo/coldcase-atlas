@@ -1,0 +1,13 @@
+# Full local install: everything in requirements.txt plus the FastAPI app
+# and the Interpol layer.
+-r requirements.txt
+
+fastapi>=0.115
+uvicorn>=0.34
+
+# Gets past the TLS fingerprinting that refuses plain requests/curl with a
+# 403. Only useful with ATLAS_ENABLE_INTERPOL=1.
+curl_cffi>=0.7
+
+# Optional: much better person-name detection in the safety layer.
+# pip install spacy && python -m spacy download en_core_web_sm
